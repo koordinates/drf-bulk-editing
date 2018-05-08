@@ -21,6 +21,9 @@ class FlobbitDetail(GenericAPIView):
     def put(self, request, *args, **kwargs):
         raise NotImplementedError('view called, unexpected')
 
+    def delete(self, request, *args, **kwargs):
+        raise NotImplementedError('view called, unexpected')
+
 
 class FlobbitListAndCreate(BulkEditMixin, GenericAPIView):
     def post(self, request, *args, **kwargs):
@@ -35,7 +38,7 @@ urlpatterns = [
 ]
 
 
-@pytest.mark.urls('tests.test_serializers')
+@pytest.mark.urls('tests.test_views')
 def test_patch_for_non_apiview(client):
     action = {
         'url': 'http://testserver/non-apiview/',
@@ -54,7 +57,7 @@ def test_patch_for_non_apiview(client):
         assert response.status_code == 400
 
 
-@pytest.mark.urls('tests.test_serializers')
+@pytest.mark.urls('tests.test_views')
 def test_patch_for_non_subresource(client):
     action = {
         'url': 'http://testserver/non-subresource/',
@@ -73,7 +76,7 @@ def test_patch_for_non_subresource(client):
         assert response.status_code == 400
 
 
-@pytest.mark.urls('tests.test_serializers')
+@pytest.mark.urls('tests.test_views')
 def test_patch_wrong_action(client):
     action = {
         'url': 'http://testserver/flobbits/1/',
@@ -90,7 +93,7 @@ def test_patch_wrong_action(client):
     assert response.status_code == 400
 
 
-@pytest.mark.urls('tests.test_serializers')
+@pytest.mark.urls('tests.test_views')
 def test_patch_create_ok(client, db):
     action = {
         # no url, defaults to http://testserver/flobbits/
@@ -109,7 +112,7 @@ def test_patch_create_ok(client, db):
         assert response.status_code == 204
 
 
-@pytest.mark.urls('tests.test_serializers')
+@pytest.mark.urls('tests.test_views')
 def test_patch_update_ok(client, db):
     action = {
         'url': 'http://testserver/flobbits/1/',
@@ -125,3 +128,21 @@ def test_patch_update_ok(client, db):
         )
         assert response.status_code == 204
         update_view.assert_called_once()
+
+
+@pytest.mark.urls('tests.test_views')
+def test_patch_delete_ok(client, db):
+    action = {
+        'url': 'http://testserver/flobbits/1/',
+        'action': 'delete',
+        # no value required
+    }
+    a_204 = Response({}, status=204)
+    with patch.object(FlobbitDetail, 'delete', return_value=a_204) as delete_view:
+        response = client.patch(
+            '/flobbits/',
+            json.dumps([action]),
+            content_type='application/json'
+        )
+        assert response.status_code == 204
+        delete_view.assert_called_once()
