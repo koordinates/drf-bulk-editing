@@ -76,12 +76,7 @@ class _ActionSerializer(serializers.Serializer):
             * edits to /foo/ aren't allowed.
         """
         current_request = self.context['request']
-
-        return (
-            fake_request.path.startswith(current_request.path)
-            # Recursive call of this view doesn't make sense, don't allow it.
-            and fake_request.path != current_request.path
-        )
+        return fake_request.path.startswith(current_request.path)
 
     def invalid_url(self, url):
         raise ValidationError({
