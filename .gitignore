@@ -7,6 +7,8 @@ local
 dist
 man
 cover
+.tox
+.pytest_cache
 .*.rej
 *.rej
 .*~

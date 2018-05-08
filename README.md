@@ -17,4 +17,3 @@ Only class-based API views (subclasses of DRF's `APIView`) may be called by bulk
 
 * tests
 * docs
-

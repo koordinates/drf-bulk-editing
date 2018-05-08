@@ -13,9 +13,12 @@ setup(
     description=open('README.md', 'r').read(),
     author='Craig de Stigter',
     author_email='craig.ds@gmail.com',
-    packages=find_packages(),
+    packages=find_packages(exclude=['tests']),
     include_package_data=True,
-    install_requires=['six'],
+    install_requires=[
+        'six',
+        'djangorestframework~=3.2',
+    ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Environment :: Web Environment',
