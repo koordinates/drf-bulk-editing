@@ -17,7 +17,9 @@ setup(
     include_package_data=True,
     install_requires=[
         'six',
-        'djangorestframework~=3.2',
+        'Django>=1.10',
+        # TODO: increase this to DRF 3.7 very soon.
+        'djangorestframework>=3.5',
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
