@@ -9,7 +9,7 @@ from .serializers import BulkEditSerializer
 
 class BulkEditMixin(object):
     """
-    Create a model instance.
+    Adds the PATCH method using BulkEditSerializer.
     """
     def patch(self, request, *args, **kwargs):
         serializer = self.get_bulk_edit_serializer()
@@ -20,7 +20,6 @@ class BulkEditMixin(object):
 
     def get_bulk_edit_serializer(self):
         return BulkEditSerializer(
-            # TODO: restrict operations/endpoints
             data=self.request.data,
             context=self.get_serializer_context(),
         )

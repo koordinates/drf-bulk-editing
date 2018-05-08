@@ -11,7 +11,7 @@ from django.urls import resolve, Resolver404
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError, APIException
 from rest_framework.request import override_method
-from rest_framework.views import APIView
+from rest_framework.generics import GenericAPIView
 
 
 __all__ = (
@@ -57,9 +57,13 @@ class _ActionSerializer(serializers.Serializer):
         'delete': 'DELETE',
     }
 
-    # Can't use HyperlinkedIdentityField, because it could be a URL to
-    # lots of different types of object.
-    url = serializers.URLField(required=False)
+    # Note: Can't use HyperlinkedIdentityField, because it could be a URL to
+    # lots of different types of object, and it could even be a list URL.
+    # Also can't use URLField, because the URLValidator requires a TLD,
+    # and that breaks in the tests (hostname is 'testserver')
+    # So we accept strings, but we validate in `validate_url`
+    # (and the hostname must be the same as that of the current request)
+    url = serializers.CharField(required=False)
     action = serializers.ChoiceField(CHOICES_ACTION)
     value = serializers.DictField(required=False)
 
@@ -78,6 +82,31 @@ class _ActionSerializer(serializers.Serializer):
         current_request = self.context['request']
         return fake_request.path.startswith(current_request.path)
 
+    def validate_url(self, url):
+        """
+        Validates a URL. Returns a 3-tuple (path, resolver_match, full URLs)
+        """
+        split = urlsplit(url)
+
+        # Check scheme, hostname and port is the same as the current request
+        r = self.context['request']
+        current_url = urlsplit(r.build_absolute_uri())
+        if tuple(split[:2]) != current_url[:2]:
+            raise self.invalid_url(url)
+
+        # Check it's a valid view
+        try:
+            resolver_match = resolve(split.path)
+        except Resolver404:
+            raise self.invalid_url(url)
+
+        view = resolver_match.func
+        if not hasattr(view, 'view_class') or not issubclass(view.view_class, GenericAPIView):
+            # Not a class-based DRF view. Can't easily support this.
+            raise self.invalid_url(url)
+
+        return split.path, resolver_match, url
+
     def invalid_url(self, url):
         raise ValidationError({
             "url": ["URL target is invalid or can't be edited by this endpoint: %s" % url]
@@ -86,24 +115,13 @@ class _ActionSerializer(serializers.Serializer):
     @contextmanager
     def _get_action_view(self, validated_data):
         request = self.context['request']
-
-        try:
-            url = validated_data['url']
-            path = urlsplit(url).path
-            match = resolve(path)
-        except Resolver404:
-            raise self.invalid_url(url)
-
-        view = match.func
-
-        if not hasattr(view, 'view_class') or not issubclass(view.view_class, APIView):
-            # Not a class-based DRF view. Can't easily support this.
-            raise self.invalid_url(url)
+        path, resolver_match, url = validated_data['url']
+        view = resolver_match.func
 
         # Make a fake request and use that for the view.
         method = self._ACTION_METHODS[validated_data['action']]
         with override_method(view, request, method) as new_request:
-            new_request.resolver_match = match
+            new_request.resolver_match = resolver_match
             new_request.path = path
             new_request._data = new_request._full_data = validated_data['value'] or {}
 
@@ -114,8 +132,8 @@ class _ActionSerializer(serializers.Serializer):
             if hasattr(view_instance, 'get') and not hasattr(view_instance, 'head'):
                 view_instance.head = view_instance.get
             view_instance.request = new_request
-            view_instance.args = match.args
-            view_instance.kwargs = match.kwargs
+            view_instance.args = resolver_match.args
+            view_instance.kwargs = resolver_match.kwargs
 
             # DRF's initialize_request() expects a WSGIRequest,
             # and wraps it with a *new* DRF Request object.
@@ -146,7 +164,8 @@ class _ActionSerializer(serializers.Serializer):
         if 'url' not in vd:
             if action == 'create':
                 # POST to the current URL
-                vd['url'] = self.request.path
+                r = self.context['request']
+                vd['url'] = (r.path, r.resolver_match, r.build_absolute_uri())
             else:
                 raise ValidationError({
                     'url': ['This field is required when action is "%s"' % action]
@@ -163,7 +182,7 @@ class _ActionSerializer(serializers.Serializer):
                 })
 
             if not self.allow_bulk_edit_for_view(view_instance.request):
-                raise self.invalid_url(vd['url'])
+                raise self.invalid_url(vd['url'][2])
 
         return vd
 
@@ -179,13 +198,6 @@ class BulkEditSerializer(serializers.ListSerializer):
     child = _ActionSerializer()
 
     def __init__(self, *args, **kwargs):
-        # TODO: implement restrictions (whitelist) on what URLs you can edit.
-        # e.g. a `subview_names` kwarg.
-        # This would also enable some alternative approaches:
-        #   * skip *calling* the view in `apply_action`. Just resolve the object
-        #     via `view.get_object()`, check the whitelist and continue
-        #   * get one serializer for each *type* of object,
-        #     call `serializer.get_queryset()`, and filter objects in one db query.
         okay_statuses = kwargs.pop('only_statuses', range(200, 400))
         super(BulkEditSerializer, self).__init__(*args, **kwargs)
         self.okay_statuses = set(okay_statuses)
