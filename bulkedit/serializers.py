@@ -11,14 +11,15 @@ from django.urls import resolve, Resolver404
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError, APIException
 from rest_framework.request import override_method
+from rest_framework.views import APIView
 
 
 __all__ = (
-    'ActionSerializer',
+    'BulkEditSerializer',
 )
 
 
-class ActionSerializer(serializers.Serializer):
+class _ActionSerializer(serializers.Serializer):
     """
     Each action has an 'action' key representing an action to take
     against an object.
@@ -62,6 +63,31 @@ class ActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(CHOICES_ACTION)
     value = serializers.DictField(required=False)
 
+    def allow_bulk_edit_for_view(self, fake_request):
+        """
+        This is called during serializer validation for each patch to be applied.
+        The fake request object corresponding to the individual edit endpoint is provided.
+
+        This should return True if the patch is allowed, and False otherwise.
+
+        The default implementation allows edits to all subresources of the current view.
+        i.e. if this view is at /foo/bar/ then:
+            * edits to /foo/bar/baz/ are allowed
+            * edits to /foo/ aren't allowed.
+        """
+        current_request = self.context['request']
+
+        return (
+            fake_request.path.startswith(current_request.path)
+            # Recursive call of this view doesn't make sense, don't allow it.
+            and fake_request.path != current_request.path
+        )
+
+    def invalid_url(self, url):
+        raise ValidationError({
+            "url": ["URL target is invalid or can't be edited by this endpoint: %s" % url]
+        })
+
     @contextmanager
     def _get_action_view(self, validated_data):
         request = self.context['request']
@@ -71,16 +97,20 @@ class ActionSerializer(serializers.Serializer):
             path = urlsplit(url).path
             match = resolve(path)
         except Resolver404:
-            raise ValidationError({
-                "url": ["URL target is invalid or can't be edited by this endpoint: %s" % url]
-            })
+            raise self.invalid_url(url)
+
         view = match.func
+
+        if not hasattr(view, 'view_class') or not issubclass(view.view_class, APIView):
+            # Not a class-based DRF view. Can't easily support this.
+            raise self.invalid_url(url)
 
         # Make a fake request and use that for the view.
         method = self._ACTION_METHODS[validated_data['action']]
-        with override_method(view, request, method) as request:
-            request.resolver_match = match
-            request._data = request._full_data = validated_data['value'] or {}
+        with override_method(view, request, method) as new_request:
+            new_request.resolver_match = match
+            new_request.path = path
+            new_request._data = new_request._full_data = validated_data['value'] or {}
 
             # `view` is actually a callback function (see View.as_view)
             # We replace it with our own callback instead,
@@ -88,7 +118,7 @@ class ActionSerializer(serializers.Serializer):
             view_instance = view.view_class(**view.view_initkwargs)
             if hasattr(view_instance, 'get') and not hasattr(view_instance, 'head'):
                 view_instance.head = view_instance.get
-            view_instance.request = request
+            view_instance.request = new_request
             view_instance.args = match.args
             view_instance.kwargs = match.kwargs
 
@@ -110,7 +140,7 @@ class ActionSerializer(serializers.Serializer):
             yield view_callback
 
     def to_internal_value(self, data):
-        vd = super(ActionSerializer, self).to_internal_value(data)
+        vd = super(_ActionSerializer, self).to_internal_value(data)
         action = vd['action']
 
         if action != 'delete' and 'value' not in vd:
@@ -118,15 +148,27 @@ class ActionSerializer(serializers.Serializer):
                 'value': ['This field is required when action is "%s"' % action]
             })
 
-        if action != 'create' and 'url' not in vd:
-            raise ValidationError({
-                'url': ['This field is required when action is "%s"' % action]
-            })
+        if 'url' not in vd:
+            if action == 'create':
+                # POST to the current URL
+                vd['url'] = self.request.path
+            else:
+                raise ValidationError({
+                    'url': ['This field is required when action is "%s"' % action]
+                })
+
+        method = self._ACTION_METHODS[action]
 
         with self._get_action_view(vd) as view_callback:
             view_instance = view_callback.view_instance
-            # TODO: here's where you'd do object filtering (call view.get_object etc)
-            pass
+
+            if method not in view_instance.allowed_methods:
+                raise ValidationError({
+                    'url': ["This endpoint doesn't accept action='%s'" % action]
+                })
+
+            if not self.allow_bulk_edit_for_view(view_instance.request):
+                raise self.invalid_url(vd['url'])
 
         return vd
 
@@ -139,7 +181,7 @@ class BulkEditSerializer(serializers.ListSerializer):
     """
     [De]Serializes a patch comprising multiple actions.
     """
-    child = ActionSerializer()
+    child = _ActionSerializer()
 
     def __init__(self, *args, **kwargs):
         # TODO: implement restrictions (whitelist) on what URLs you can edit.
