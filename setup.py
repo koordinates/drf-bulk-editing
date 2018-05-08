@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='drf-bulk-editing',
-    version='0.0.dev1',
+    version='0.0.2',
     url='http://www.django-rest-framework.org',
     license='BSD',
     description=open('README.md', 'r').read(),
