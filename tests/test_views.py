@@ -146,3 +146,36 @@ def test_patch_delete_ok(client, db):
         )
         assert response.status_code == 204
         delete_view.assert_called_once()
+
+
+@pytest.mark.urls('tests.test_views')
+def test_patch_accepts_site_relative_url(client, db):
+    action = {
+        # No scheme/protocol, which is fine
+        'url': '/flobbits/1/',
+        'action': 'delete',
+    }
+    a_204 = Response({}, status=204)
+    with patch.object(FlobbitDetail, 'delete', return_value=a_204) as delete_view:
+        response = client.patch(
+            '/flobbits/',
+            json.dumps([action]),
+            content_type='application/json'
+        )
+        assert response.status_code == 204
+        delete_view.assert_called_once()
+
+
+@pytest.mark.urls('tests.test_views')
+def test_patch_with_foreign_url_error(client, db):
+    action = {
+        # No scheme/protocol, which is fine
+        'url': 'http://example.com/flobbits/1/',
+        'action': 'delete',
+    }
+    response = client.patch(
+        '/flobbits/',
+        json.dumps([action]),
+        content_type='application/json'
+    )
+    assert response.status_code == 400

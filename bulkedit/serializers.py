@@ -84,15 +84,20 @@ class _ActionSerializer(serializers.Serializer):
 
     def validate_url(self, url):
         """
-        Validates a URL. Returns a 3-tuple (path, resolver_match, full URLs)
+        Validates a URL. Returns a 3-tuple (path, resolver_match, full URL)
+
+        Accepts either host-relative URLs (starting with '/') or absolute URLs.
+        If an absolute URL is supplied, the protocol/hostname/port must
+        match the current request.
         """
         split = urlsplit(url)
 
-        # Check scheme, hostname and port is the same as the current request
-        r = self.context['request']
-        current_url = urlsplit(r.build_absolute_uri())
-        if tuple(split[:2]) != current_url[:2]:
-            raise self.invalid_url(url)
+        if split.scheme or split.netloc:
+            # Check scheme, hostname and port is the same as the current request
+            r = self.context['request']
+            current_url = urlsplit(r.build_absolute_uri())
+            if tuple(split[:2]) != current_url[:2]:
+                raise self.invalid_url(url)
 
         # Check it's a valid view
         try:
@@ -123,7 +128,7 @@ class _ActionSerializer(serializers.Serializer):
         with override_method(view, request, method) as new_request:
             new_request.resolver_match = resolver_match
             new_request.path = path
-            new_request._data = new_request._full_data = validated_data['value'] or {}
+            new_request._data = new_request._full_data = validated_data.get('value', {})
 
             # `view` is actually a callback function (see View.as_view)
             # We replace it with our own callback instead,

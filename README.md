@@ -60,11 +60,12 @@ This project is in early development and will change quickly. No guarantees abou
 
 1. The actual views are called, so access permissions etc are respected.
 2. The entire update is run in a transaction.
-3. Response status codes:
+3. The `url` field in each action should be either a site-relative URL or an absolute URL on the current site. `url` is optional for `create` actions.
+4. Response status codes:
     * Successful patches always receive a `204 No Content` response.
     * If only one unique error response code is returned, the entire patch receives that response code.
     * If there are more than one unique error code, the entire patch receives a 500 or 400 response (depending on whether there were any 5xx errors)
-4. By default, the actions are limited to subresources (so a `PATCH` to `/flobbits/` won't accept actions with `"url": "/other/"`.)
+5. By default, the actions are limited to subresources (so a `PATCH` to `/flobbits/` won't accept actions with `"url": "/other/"`.)
 
 # Limitations
 
