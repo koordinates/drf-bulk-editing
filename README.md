@@ -1,3 +1,5 @@
+![Build status](https://travis-ci.org/koordinates/drf-bulk-editing.svg?branch=master)
+
 # Bulk editing for Django REST Framework
 
 This project allows you to manipulate multiple objects from your API in one request.

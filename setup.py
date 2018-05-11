@@ -7,10 +7,10 @@ from setuptools import setup, find_packages
 
 setup(
     name='drf-bulk-editing',
-    version='0.0.5',
+    version='0.1.0',
     url='http://www.django-rest-framework.org',
     license='BSD',
-    description=open('README.md', 'r').read(),
+    description='Bulk editing for Django REST Framework',
     author='Craig de Stigter',
     author_email='craig.ds@gmail.com',
     packages=find_packages(exclude=['tests']),
@@ -22,7 +22,7 @@ setup(
         'djangorestframework>=3.5',
     ],
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
         'Framework :: Django',
         'Framework :: Django :: 1.11',
